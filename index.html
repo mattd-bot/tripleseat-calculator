@@ -30,7 +30,6 @@
   --shadow-lg: 0 8px 32px rgba(27,43,75,0.13);
 }
 
-html,body{height:100%;overflow-x:hidden;}
 body{font-family:'Quicksand',sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;}
 
 /* ══ HERO ══ */
@@ -66,7 +65,9 @@ body{font-family:'Quicksand',sans-serif;background:var(--bg);color:var(--text);-
 .left-col{}
 
 /* ── RIGHT COLUMN – sticky results ── */
-.right-col{position:sticky;top:20px;align-self:start;}
+.right-col{position:relative;}
+.right-col.is-fixed .results-panel{position:fixed;top:20px;width:var(--rp-width);z-index:200;}
+.right-col.is-bottom .results-panel{position:absolute;bottom:0;top:auto;}
 
 /* ══ CARD ══ */
 .card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid var(--border);padding:24px 28px;margin-bottom:16px;}
@@ -182,7 +183,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
 /* ══ RESPONSIVE ══ */
 @media(max-width:760px){
   .two-col{grid-template-columns:1fr;}
-  .right-col{position:static;}
+  .right-col.is-fixed .results-panel{position:static!important;width:auto!important;}
   .savings-grid{grid-template-columns:1fr 1fr;gap:10px;}
   .savings-div{display:none;}
   .blog-cards{grid-template-columns:1fr;}
@@ -484,16 +485,54 @@ buildTasks();recalc();
 tasks.forEach(t=>{const mn=t.manualRange[0]-t.withRange[1],mx=t.manualRange[1]-t.withRange[0];updateTask(t.id,t.avg,mn,mx);});
 window.addEventListener("load",initPos);setTimeout(initPos,300);
 
-
+/* ── Sticky right panel ── */
+/* The iframe has no internal scroll — the parent WP page scrolls.
+   We receive the parent's scrollY via postMessage from the embed snippet,
+   and also handle the standalone (non-iframe) case via window.scroll.     */
+function stickyPanel(parentScrollY){
+  const rightCol = document.querySelector('.right-col');
+  const panel    = document.querySelector('.results-panel');
+  if(!rightCol || !panel || window.innerWidth < 761){
+    if(panel){ panel.style.position=''; panel.style.top=''; panel.style.width=''; }
+    return;
+  }
+  const colTop  = rightCol.getBoundingClientRect().top + (parentScrollY || 0);
+  const colBot  = colTop + rightCol.offsetHeight;
+  const panelH  = panel.offsetHeight;
+  const colW    = rightCol.offsetWidth;
+  const scrollY = parentScrollY !== undefined ? parentScrollY : (window.scrollY||window.pageYOffset);
+  const pad     = 20;
+  if(scrollY + pad < colTop){
+    panel.style.position = '';
+    panel.style.top      = '';
+    panel.style.width    = '';
+  } else if(scrollY + pad + panelH >= colBot){
+    panel.style.position = 'absolute';
+    panel.style.top      = (colBot - colTop - panelH) + 'px';
+    panel.style.width    = colW + 'px';
+  } else {
+    panel.style.position = 'fixed';
+    panel.style.top      = pad + 'px';
+    panel.style.width    = colW + 'px';
+  }
+}
+/* standalone scroll (when viewed directly on GitHub) */
+window.addEventListener('scroll', function(){ stickyPanel(); }, {passive:true});
+window.addEventListener('resize', function(){ stickyPanel(); });
+window.addEventListener('load',   function(){ setTimeout(function(){ stickyPanel(); }, 300); });
+/* receive scroll position sent from parent WordPress page */
+window.addEventListener('message', function(e){
+  if(e.data && typeof e.data.wpScrollY === 'number'){ stickyPanel(e.data.wpScrollY); }
+});
 
 /* ── Auto-resize: tell parent iframe our true height ── */
 function sendHeight(){
-  /* measure the full page content height, not the viewport */
-  const h = document.body.scrollHeight;
+  const h = document.documentElement.scrollHeight;
   window.parent.postMessage({iframeHeight: h},"*");
 }
-window.addEventListener("load", function(){ setTimeout(sendHeight,300); });
+window.addEventListener("load", sendHeight);
 window.addEventListener("resize", sendHeight);
+/* fire whenever sliders or expand toggle change layout */
 const _ro = new ResizeObserver(sendHeight);
 _ro.observe(document.body);
 
