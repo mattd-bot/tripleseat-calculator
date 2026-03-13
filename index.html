@@ -65,7 +65,9 @@ body{font-family:'Quicksand',sans-serif;background:var(--bg);color:var(--text);-
 .left-col{}
 
 /* ── RIGHT COLUMN – sticky results ── */
-.right-col{position:sticky;top:80px;}
+.right-col{position:relative;}
+.right-col.is-fixed .results-panel{position:fixed;top:20px;width:var(--rp-width);z-index:200;}
+.right-col.is-bottom .results-panel{position:absolute;bottom:0;top:auto;}
 
 /* ══ CARD ══ */
 .card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid var(--border);padding:24px 28px;margin-bottom:16px;}
@@ -129,8 +131,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
 
 /* ══ RESULTS PANEL (right col) ══ */
 .results-panel{background:linear-gradient(155deg,var(--navy-deep) 0%,var(--navy) 60%,#2b3055 100%);border-radius:14px;padding:28px 24px;color:#fff;box-shadow:var(--shadow-lg);}
-.rp-eyebrow{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#7a7e99;margin-bottom:3px;}
-.rp-sublabel{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--coral);margin-bottom:20px;}
+.rp-eyebrow{font-size:16px;font-weight:700;letter-spacing:.01em;text-transform:none;color:#fff;margin-bottom:3px;line-height:1.2;}
+.rp-sublabel{font-size:14px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--coral);margin-bottom:20px;}
 .rp-stat{margin-bottom:18px;}
 .rp-stat-label{font-size:10px;color:#7a7e99;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:3px;}
 .rp-stat-value{font-size:clamp(26px,3.5vw,36px);font-weight:700;line-height:1;}
@@ -181,7 +183,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
 /* ══ RESPONSIVE ══ */
 @media(max-width:760px){
   .two-col{grid-template-columns:1fr;}
-  .right-col{position:static;}
+  .right-col.is-fixed .results-panel{position:static!important;width:auto!important;}
   .savings-grid{grid-template-columns:1fr 1fr;gap:10px;}
   .savings-div{display:none;}
   .blog-cards{grid-template-columns:1fr;}
@@ -482,6 +484,41 @@ document.getElementById("events-per-month").addEventListener("input",recalc);
 buildTasks();recalc();
 tasks.forEach(t=>{const mn=t.manualRange[0]-t.withRange[1],mx=t.manualRange[1]-t.withRange[0];updateTask(t.id,t.avg,mn,mx);});
 window.addEventListener("load",initPos);setTimeout(initPos,300);
+
+/* ── Sticky right panel: JS-driven so it works inside WordPress iframes ── */
+function initStickyPanel(){
+  const rightCol = document.querySelector('.right-col');
+  const panel    = document.querySelector('.results-panel');
+  if(!rightCol || !panel) return;
+  if(window.innerWidth < 761){ rightCol.classList.remove('is-fixed','is-bottom'); return; }
+  const colRect  = rightCol.getBoundingClientRect();
+  const colTop   = rightCol.offsetTop;
+  const colBot   = colTop + rightCol.offsetHeight;
+  const panelH   = panel.offsetHeight;
+  const scrollY  = window.scrollY || window.pageYOffset;
+  const topEdge  = 20; /* px from top of viewport */
+  /* store width so fixed panel matches column width */
+  rightCol.style.setProperty('--rp-width', colRect.width + 'px');
+  if(scrollY + topEdge < colTop){
+    /* above the column */
+    rightCol.classList.remove('is-fixed','is-bottom');
+  } else if(scrollY + topEdge + panelH >= colBot){
+    /* panel would go below bottom of column */
+    rightCol.classList.remove('is-fixed');
+    rightCol.classList.add('is-bottom');
+  } else {
+    /* normal sticky zone */
+    rightCol.classList.add('is-fixed');
+    rightCol.classList.remove('is-bottom');
+  }
+}
+window.addEventListener('scroll', initStickyPanel, {passive:true});
+window.addEventListener('resize', function(){
+  const rightCol = document.querySelector('.right-col');
+  if(rightCol){ rightCol.style.setProperty('--rp-width', rightCol.getBoundingClientRect().width+'px'); }
+  initStickyPanel();
+});
+window.addEventListener('load', function(){ setTimeout(initStickyPanel, 200); });
 
 /* ── Auto-resize: tell parent iframe our true height ── */
 function sendHeight(){
